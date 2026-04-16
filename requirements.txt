@@ -2,3 +2,8 @@ aiogram==3.7.0
 aiohttp==3.9.5
 python-dotenv==1.0.0
 pydantic==2.6.1
+phonenumbers==8.13.34
+dnspython==2.6.1
+whois==0.9.27
+pyOpenSSL==24.0.0
+cryptography==42.0.5
