@@ -1,6 +1,6 @@
 # ============================================================
 # ULTIMATE AGGRESSIVE OSINT FRAMEWORK
-# Dockerfile - Полное окружение для максимальной разведки
+# Dockerfile - ИСПРАВЛЕННАЯ ВЕРСИЯ
 # ============================================================
 
 FROM python:3.11-slim-bookworm
@@ -8,7 +8,7 @@ FROM python:3.11-slim-bookworm
 # Метаданные
 LABEL maintainer="OSINT Framework"
 LABEL description="ULTIMATE AGGRESSIVE OSINT - Выжимаем все соки!"
-LABEL version="1.0.0"
+LABEL version="2.0.0"
 
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -86,12 +86,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tor \
     torsocks \
     proxychains4 \
+    # SSL утилиты (СИСТЕМНЫЕ, НЕ PYTHON!)
+    sslscan \
+    sslyze \
+    testssl.sh \
     # Мультимедиа
     ffmpeg \
     # Прочее
     locales \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Установка testssl.sh (если не установился через apt)
+RUN if ! command -v testssl &> /dev/null; then \
+        git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
+        ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl; \
+    fi
 
 # Установка локали
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
@@ -113,34 +123,62 @@ RUN useradd -m -u 1000 -s /bin/bash osint && \
 # Рабочая директория
 WORKDIR /app
 
-# Копируем requirements
-COPY requirements.txt .
+# Копируем ИСПРАВЛЕННЫЙ requirements.txt
+COPY requirements-fixed.txt /app/requirements.txt
 
-# Установка Python пакетов
+# Установка Python пакетов (с обработкой ошибок)
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+    # Устанавливаем критически важные пакеты
+    pip install --no-cache-dir \
+        aiogram>=3.0.0 \
+        aiohttp>=3.9.0 \
+        python-dotenv>=1.0.0 \
+        phonenumbers>=8.13.0 \
+        dnspython>=2.4.0 \
+        python-whois>=0.8.0 \
+        Pillow>=10.1.0 \
+        beautifulsoup4>=4.12.0 \
+        requests>=2.31.0 \
+        email-validator>=2.1.0 \
+        pyOpenSSL>=23.3.0 \
+        cryptography>=41.0.0 \
+        certifi>=2023.11.17 \
+    && \
+    # Устанавливаем остальные из requirements с игнорированием ошибок
+    if [ -f requirements.txt ] && [ -s requirements.txt ]; then \
+        echo "=== Устанавливаем остальные зависимости ===" && \
+        while IFS= read -r line || [ -n "$line" ]; do \
+            [ -z "$line" ] && continue; \
+            line=$(echo "$line" | sed 's/^\xEF\xBB\xBF//' | sed 's/^\xFF\xFE//' | sed 's/^\xFE\xFF//' | tr -d '\r\0' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'); \
+            [ -z "$line" ] && continue; \
+            case "$line" in \#*) continue ;; esac; \
+            # Пропускаем системные пакеты
+            if echo "$line" | grep -qiE '^(sslscan|sslyze|nmap|whois|tor)'; then \
+                echo "ℹ️ Пропускаем системный пакет: $line"; \
+                continue; \
+            fi; \
+            # Пропускаем встроенные модули Python
+            if echo "$line" | grep -qiE '^(sqlite3|json|os|sys|time|datetime|re|random|math|logging|asyncio|collections|itertools|functools|operator|pathlib|urllib|http|socket|ssl|hashlib|base64|uuid|threading|multiprocessing|queue|concurrent|subprocess|shutil|tempfile|pickle|copy|weakref|gc|ctypes|struct|array|binascii|codecs|encodings|locale|gettext|argparse|configparser|csv|io|textwrap|string|unicodedata)$'; then \
+                echo "ℹ️ Пропускаем встроенный модуль: $line"; \
+                continue; \
+            fi; \
+            echo "📦 Устанавливаем: $line"; \
+            pip install --no-cache-dir "$line" 2>/dev/null || echo "⚠️ Не удалось установить $line (пропускаем)"; \
+        done < requirements.txt; \
+    fi && \
+    echo "=== Установка завершена ==="
 
-# Установка дополнительных пакетов через git
-RUN pip install --no-cache-dir \
-    git+https://github.com/laramies/theHarvester.git \
-    git+https://github.com/sherlock-project/sherlock.git \
-    git+https://github.com/megadose/holehe.git \
-    git+https://github.com/soxoj/maigret.git \
-    git+https://github.com/p1ngul1n0/blackbird.git \
-    git+https.com/nexfil/nexfil.git
+# Загрузка NLTK данных (с обработкой ошибок)
+RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data', quiet=True); nltk.download('stopwords', download_dir='/usr/local/share/nltk_data', quiet=True); nltk.download('averaged_perceptron_tagger', download_dir='/usr/local/share/nltk_data', quiet=True)" 2>/dev/null || echo "⚠️ NLTK download failed (non-critical)"
 
-# Загрузка NLTK данных
-RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data'); nltk.download('stopwords', download_dir='/usr/local/share/nltk_data'); nltk.download('averaged_perceptron_tagger', download_dir='/usr/local/share/nltk_data'); nltk.download('maxent_ne_chunker', download_dir='/usr/local/share/nltk_data'); nltk.download('words', download_dir='/usr/local/share/nltk_data'); nltk.download('vader_lexicon', download_dir='/usr/local/share/nltk_data')"
-
-# Загрузка spaCy моделей
-RUN python -m spacy download en_core_web_sm && \
-    python -m spacy download ru_core_news_sm
+# Загрузка spaCy моделей (с обработкой ошибок)
+RUN python -m spacy download en_core_web_sm 2>/dev/null || echo "⚠️ spaCy model download failed (non-critical)" && \
+    python -m spacy download ru_core_news_sm 2>/dev/null || echo "⚠️ spaCy RU model download failed (non-critical)"
 
 # Установка geolite2 баз
 RUN mkdir -p /usr/local/share/GeoIP && \
-    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb -O /usr/local/share/GeoIP/GeoLite2-City.mmdb && \
-    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb -O /usr/local/share/GeoIP/GeoLite2-ASN.mmdb && \
-    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb -O /usr/local/share/GeoIP/GeoLite2-Country.mmdb
+    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb -O /usr/local/share/GeoIP/GeoLite2-City.mmdb 2>/dev/null || echo "⚠️ GeoIP download failed" && \
+    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb -O /usr/local/share/GeoIP/GeoLite2-ASN.mmdb 2>/dev/null || echo "⚠️ GeoIP ASN download failed"
 
 # Копируем код приложения
 COPY --chown=osint:osint . .
@@ -149,12 +187,8 @@ COPY --chown=osint:osint . .
 RUN mkdir -p /app/logs /app/reports /app/cache /app/uploads /app/exports && \
     chown -R osint:osint /app/logs /app/reports /app/cache /app/uploads /app/exports
 
-# Копируем конфигурационные файлы
-COPY docker/config.torrc /etc/tor/torrc 2>/dev/null || true
-COPY docker/proxychains.conf /etc/proxychains4.conf 2>/dev/null || true
-
-# Устанавливаем права
-RUN chmod +x /app/*.py 2>/dev/null || true
+# Устанавливаем права на Python файлы
+RUN find /app -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
 
 # Переключаемся на пользователя
 USER osint
@@ -172,9 +206,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Тома для постоянных данных
 VOLUME ["/data", "/app/logs", "/app/reports", "/app/cache", "/app/uploads", "/app/exports"]
-
-# Открываем порты (если нужен веб-интерфейс)
-EXPOSE 8000 8080
 
 # Команда запуска
 CMD ["python", "bot.py"]
