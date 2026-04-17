@@ -1,12 +1,11 @@
 # ============================================================
 # ULTIMATE AGGRESSIVE OSINT FRAMEWORK
-# ТОЛЬКО PYTHON ПАКЕТЫ (системные устанавливаются через apt)
+# ПОЛНЫЙ requirements.txt
 # ============================================================
 
 # Ядро
 aiogram>=3.0.0
 aiohttp>=3.9.0
-asyncio>=3.4.3
 python-dotenv>=1.0.0
 
 # Телефоны
@@ -15,15 +14,17 @@ phonenumbers>=8.13.0
 # Email и DNS
 dnspython>=2.4.0
 email-validator>=2.1.0
+validate-email-address>=1.0.0
 publicsuffixlist>=0.10.0
+publicsuffix2>=2.20191221
 tld>=0.13
 tldextract>=5.1.0
 idna>=3.4
 
-# WHOIS
+# WHOIS и домены
 python-whois>=0.8.0
 
-# SSL и криптография (Python пакеты)
+# SSL и криптография
 pyOpenSSL>=23.3.0
 cryptography>=41.0.0
 certifi>=2023.11.17
@@ -37,12 +38,22 @@ geopy>=2.4.0
 Pillow>=10.1.0
 exifread>=3.0.0
 
+# Замена python-magic
+filetype>=1.2.0
+
 # Документы
-python-magic>=0.4.27
 pdfplumber>=0.10.0
+docx2txt>=0.8
 python-docx>=1.1.0
 openpyxl>=3.1.0
 python-pptx>=0.6.23
+olefile>=0.47
+pdftotext>=2.2.2
+textract>=1.6.5
+
+# Архивы
+rarfile>=4.1
+py7zr>=0.20.0
 
 # Парсинг
 beautifulsoup4>=4.12.0
@@ -54,34 +65,37 @@ shodan>=1.31.0
 vt-py>=0.18.0
 waybackpy>=3.0.0
 
-# Криптовалюты
-web3>=6.14.0
-
 # Анализ текста
 nltk>=3.8.0
 spacy>=3.7.0
 langdetect>=1.0.9
 googletrans>=4.0.0
+translators>=5.9.0
 
 # Графы
 networkx>=3.2.0
 
-# Базы данных
-aiosqlite>=0.19.0
-redis>=5.0.0
-
 # Обработка данных
 pandas>=2.1.0
 numpy>=1.26.0
+python-dateutil>=2.8.0
+dateparser>=1.2.0
+pytz>=2023.3
 
 # Утилиты
 click>=8.1.0
 rich>=13.7.0
 tqdm>=4.66.0
 colorama>=0.4.6
-python-dateutil>=2.8.0
-pytz>=2023.3
+pyyaml>=6.0.0
 
 # Хэши
 bcrypt>=4.1.0
 pycryptodome>=3.19.0
+
+# Криптовалюты
+web3>=6.14.0
+
+# Дополнительно
+urllib3>=2.0.0
+chardet>=5.0.0
