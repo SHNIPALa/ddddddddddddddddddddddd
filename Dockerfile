@@ -1,14 +1,14 @@
 # ============================================================
 # ULTIMATE AGGRESSIVE OSINT FRAMEWORK
-# Dockerfile - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# Dockerfile - С ИСПРАВЛЕНИЕМ libmagic
 # ============================================================
 
 FROM python:3.11-slim-bookworm
 
 # Метаданные
 LABEL maintainer="OSINT Framework"
-LABEL description="ULTIMATE AGGRESSIVE OSINT - Выжимаем все соки!"
-LABEL version="2.0.0"
+LABEL description="ULTIMATE AGGRESSIVE OSINT"
+LABEL version="2.0.1"
 
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,36 +27,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     gnupg \
-    apt-transport-https \
-    software-properties-common \
-    # Python зависимости для сборки
+    # Python зависимости
     python3-dev \
     python3-pip \
     python3-setuptools \
     python3-wheel \
-    cython3 \
-    # Библиотеки для криптографии и SSL
+    # Библиотеки
     libssl-dev \
     libffi-dev \
-    libsasl2-dev \
-    libldap2-dev \
-    libcurl4-openssl-dev \
-    # XML и HTML парсинг
     libxml2-dev \
     libxslt1-dev \
-    libxml2-utils \
-    # Изображения
     libjpeg-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
     libtiff-dev \
     libwebp-dev \
-    libopenjp2-7-dev \
-    libimage-exiftool-perl \
-    exiftool \
-    # Документы
+    # 🔥 ВАЖНО: libmagic для python-magic
     libmagic-dev \
     libmagic1 \
+    file \
+    # Документы
     poppler-utils \
     antiword \
     unrtf \
@@ -66,41 +56,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Базы данных
     libsqlite3-dev \
     libpq-dev \
-    libmariadb-dev \
     # Архивы
     unzip \
     p7zip-full \
     p7zip-rar \
-    rar \
     unrar \
-    lz4 \
-    zstd \
     # Сеть и DNS
     dnsutils \
-    bind9-dnsutils \
     whois \
     nmap \
-    net-tools \
-    iputils-ping \
-    traceroute \
     tor \
     torsocks \
-    proxychains4 \
-    # SSL утилиты (СИСТЕМНЫЕ, НЕ PYTHON!)
+    # SSL утилиты
     sslscan \
-    sslyze \
-    testssl.sh \
     # Мультимедиа
     ffmpeg \
-    # Прочее
+    # Локали
     locales \
     tzdata \
+    # Очистка кэша apt
     && rm -rf /var/lib/apt/lists/*
 
-# Установка testssl.sh (если не установился через apt)
-RUN if ! command -v testssl &> /dev/null; then \
-        git clone --depth 1 https://github.com/drwetter/testssl.sh.git /opt/testssl && \
-        ln -s /opt/testssl/testssl.sh /usr/local/bin/testssl; \
+# 🔥 Создаем симлинк для libmagic (если нужно)
+RUN if [ -f /usr/lib/x86_64-linux-gnu/libmagic.so.1 ]; then \
+        ln -sf /usr/lib/x86_64-linux-gnu/libmagic.so.1 /usr/lib/libmagic.so; \
+    elif [ -f /usr/lib/aarch64-linux-gnu/libmagic.so.1 ]; then \
+        ln -sf /usr/lib/aarch64-linux-gnu/libmagic.so.1 /usr/lib/libmagic.so; \
     fi
 
 # Установка локали
@@ -111,23 +92,25 @@ ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
-# Установка часового пояса
+# Часовой пояс
 ENV TZ=Europe/Moscow
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Создаем пользователя без root прав
+# Создаем пользователя
 RUN useradd -m -u 1000 -s /bin/bash osint && \
     mkdir -p /app /data /tmp/osint && \
     chown -R osint:osint /app /data /tmp/osint
 
-# Рабочая директория
 WORKDIR /app
 
-# Копируем ИСПРАВЛЕННЫЙ requirements.txt
-COPY requirements-fixed.txt /app/requirements.txt
+# Копируем requirements
+COPY requirements.txt /app/requirements.txt
 
-# Установка Python пакетов (с обработкой ошибок)
+# 🔥 Установка Python пакетов с принудительной переустановкой python-magic
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    # Сначала устанавливаем python-magic отдельно
+    pip install --no-cache-dir --force-reinstall python-magic && \
+    pip install --no-cache-dir --force-reinstall python-magic-bin 2>/dev/null || true && \
     # Устанавливаем критически важные пакеты
     pip install --no-cache-dir \
         aiogram>=3.0.0 \
@@ -144,7 +127,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
         cryptography>=41.0.0 \
         certifi>=2023.11.17 \
     && \
-    # Устанавливаем остальные из requirements с игнорированием ошибок
+    # Устанавливаем остальные пакеты из requirements с игнорированием ошибок
     if [ -f requirements.txt ] && [ -s requirements.txt ]; then \
         echo "=== Устанавливаем остальные зависимости ===" && \
         while IFS= read -r line || [ -n "$line" ]; do \
@@ -152,33 +135,31 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
             line=$(echo "$line" | sed 's/^\xEF\xBB\xBF//' | sed 's/^\xFF\xFE//' | sed 's/^\xFE\xFF//' | tr -d '\r\0' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'); \
             [ -z "$line" ] && continue; \
             case "$line" in \#*) continue ;; esac; \
-            # Пропускаем системные пакеты
-            if echo "$line" | grep -qiE '^(sslscan|sslyze|nmap|whois|tor)'; then \
-                echo "ℹ️ Пропускаем системный пакет: $line"; \
+            # Пропускаем python-magic (уже установлен)
+            if echo "$line" | grep -qi "python-magic"; then \
+                echo "ℹ️ Пропускаем python-magic (уже установлен)"; \
                 continue; \
             fi; \
-            # Пропускаем встроенные модули Python
-            if echo "$line" | grep -qiE '^(sqlite3|json|os|sys|time|datetime|re|random|math|logging|asyncio|collections|itertools|functools|operator|pathlib|urllib|http|socket|ssl|hashlib|base64|uuid|threading|multiprocessing|queue|concurrent|subprocess|shutil|tempfile|pickle|copy|weakref|gc|ctypes|struct|array|binascii|codecs|encodings|locale|gettext|argparse|configparser|csv|io|textwrap|string|unicodedata)$'; then \
-                echo "ℹ️ Пропускаем встроенный модуль: $line"; \
+            # Пропускаем системные пакеты
+            if echo "$line" | grep -qiE '^(sslscan|sslyze|nmap|whois|tor|libmagic)'; then \
+                echo "ℹ️ Пропускаем системный пакет: $line"; \
                 continue; \
             fi; \
             echo "📦 Устанавливаем: $line"; \
             pip install --no-cache-dir "$line" 2>/dev/null || echo "⚠️ Не удалось установить $line (пропускаем)"; \
         done < requirements.txt; \
     fi && \
-    echo "=== Установка завершена ==="
+    echo "=== Проверка установки python-magic ===" && \
+    python -c "import magic; print('✅ python-magic работает! Magic version:', magic.version)" || echo "❌ python-magic НЕ работает"
 
-# Загрузка NLTK данных (с обработкой ошибок)
-RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data', quiet=True); nltk.download('stopwords', download_dir='/usr/local/share/nltk_data', quiet=True); nltk.download('averaged_perceptron_tagger', download_dir='/usr/local/share/nltk_data', quiet=True)" 2>/dev/null || echo "⚠️ NLTK download failed (non-critical)"
+# 🔥 Проверка libmagic
+RUN echo "=== Проверка системной libmagic ===" && \
+    ldconfig -p | grep libmagic && \
+    file --version && \
+    ls -la /usr/lib/*/libmagic* 2>/dev/null || echo "libmagic files not found in standard location"
 
-# Загрузка spaCy моделей (с обработкой ошибок)
-RUN python -m spacy download en_core_web_sm 2>/dev/null || echo "⚠️ spaCy model download failed (non-critical)" && \
-    python -m spacy download ru_core_news_sm 2>/dev/null || echo "⚠️ spaCy RU model download failed (non-critical)"
-
-# Установка geolite2 баз
-RUN mkdir -p /usr/local/share/GeoIP && \
-    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb -O /usr/local/share/GeoIP/GeoLite2-City.mmdb 2>/dev/null || echo "⚠️ GeoIP download failed" && \
-    wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb -O /usr/local/share/GeoIP/GeoLite2-ASN.mmdb 2>/dev/null || echo "⚠️ GeoIP ASN download failed"
+# Загрузка NLTK данных (опционально)
+RUN python -c "import nltk; nltk.download('punkt', download_dir='/usr/local/share/nltk_data', quiet=True); nltk.download('stopwords', download_dir='/usr/local/share/nltk_data', quiet=True)" 2>/dev/null || echo "⚠️ NLTK download failed (non-critical)"
 
 # Копируем код приложения
 COPY --chown=osint:osint . .
@@ -187,9 +168,6 @@ COPY --chown=osint:osint . .
 RUN mkdir -p /app/logs /app/reports /app/cache /app/uploads /app/exports && \
     chown -R osint:osint /app/logs /app/reports /app/cache /app/uploads /app/exports
 
-# Устанавливаем права на Python файлы
-RUN find /app -name "*.py" -exec chmod +x {} \; 2>/dev/null || true
-
 # Переключаемся на пользователя
 USER osint
 
@@ -197,15 +175,14 @@ USER osint
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
-ENV TOR_SOCKS_PORT=9050
-ENV TOR_CONTROL_PORT=9051
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu:$LD_LIBRARY_PATH
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)" || exit 1
+    CMD python -c "import magic; import sys; sys.exit(0)" || exit 1
 
-# Тома для постоянных данных
+# Тома
 VOLUME ["/data", "/app/logs", "/app/reports", "/app/cache", "/app/uploads", "/app/exports"]
 
 # Команда запуска
-CMD ["python", "bot.py"]
+CMD ["python", "Derty.py"]
