@@ -1,17 +1,17 @@
 # ============================================================
 # ULTIMATE AGGRESSIVE OSINT FRAMEWORK
-# Dockerfile - ИСПРАВЛЕННАЯ ВЕРСИЯ (с pdftotext зависимостями)
+# Dockerfile - ПОЛНАЯ ВЕРСИЯ СО ВСЕМИ ИНСТРУМЕНТАМИ
 # ============================================================
 
 FROM python:3.11-slim-bookworm
 
 LABEL maintainer="OSINT Framework"
-LABEL description="ULTIMATE AGGRESSIVE OSINT"
-LABEL version="3.0.1"
+LABEL description="ULTIMATE AGGRESSIVE OSINT - ALL IMPORTS WORKING"
+LABEL version="4.0.0"
 
-# Установка системных зависимостей (ВКЛЮЧАЯ ВСЁ ДЛЯ КОМПИЛЯЦИИ)
+# Установка системных зависимостей
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Базовые утилиты для компиляции
+    # Компиляция
     build-essential \
     gcc \
     g++ \
@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     automake \
     autoconf \
     libtool \
+    # Git и сеть
     git \
     curl \
     wget \
@@ -41,11 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libtiff-dev \
     libwebp-dev \
-    # 🔥 PDF и Poppler (для pdftotext)
+    # PDF/Poppler
     libpoppler-dev \
     libpoppler-cpp-dev \
     poppler-utils \
-    pkg-config \
     # Документы
     antiword \
     tesseract-ocr \
@@ -55,13 +55,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     p7zip-full \
     unrar \
-    # Сеть
+    # Сеть и DNS
     dnsutils \
     whois \
     nmap \
     tor \
+    torsocks \
+    # Базы данных
+    libsqlite3-dev \
     # Локали
     locales \
+    # Chromium для selenium
+    chromium \
+    chromium-driver \
     # Очистка
     && rm -rf /var/lib/apt/lists/*
 
@@ -80,8 +86,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Создаем пользователя
 RUN useradd -m -u 1000 -s /bin/bash osint && \
-    mkdir -p /app /data /tmp/osint && \
-    chown -R osint:osint /app /data /tmp/osint
+    mkdir -p /app /data /tmp/osint /opt/osint-tools && \
+    chown -R osint:osint /app /data /tmp/osint /opt/osint-tools
 
 WORKDIR /app
 
@@ -90,76 +96,69 @@ COPY requirements.txt .
 
 # Установка Python пакетов
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    # Устанавливаем пакеты по одному с обработкой ошибок
-    for pkg in \
-        "aiogram>=3.0.0" \
-        "aiohttp>=3.9.0" \
-        "python-dotenv>=1.0.0" \
-        "phonenumbers>=8.13.0" \
-        "dnspython>=2.4.0" \
-        "email-validator>=2.1.0" \
-        "python-whois>=0.8.0" \
-        "pyOpenSSL>=23.3.0" \
-        "cryptography>=41.0.0" \
-        "certifi>=2023.11.17" \
-        "geoip2>=4.7.0" \
-        "maxminddb>=2.4.0" \
-        "geopy>=2.4.0" \
-        "Pillow>=10.1.0" \
-        "exifread>=3.0.0" \
-        "filetype>=1.2.0" \
-        "pdfplumber>=0.10.0" \
-        "docx2txt>=0.8" \
-        "python-docx>=1.1.0" \
-        "openpyxl>=3.1.0" \
-        "python-pptx>=0.6.23" \
-        "olefile>=0.47" \
-        "textract>=1.6.5" \
-        "rarfile>=4.1" \
-        "py7zr>=0.20.0" \
-        "beautifulsoup4>=4.12.0" \
-        "lxml>=4.9.0" \
-        "requests>=2.31.0" \
-        "shodan>=1.31.0" \
-        "vt-py>=0.18.0" \
-        "waybackpy>=3.0.0" \
-        "nltk>=3.8.0" \
-        "spacy>=3.7.0" \
-        "langdetect>=1.0.9" \
-        "googletrans>=4.0.0" \
-        "networkx>=3.2.0" \
-        "pandas>=2.1.0" \
-        "numpy>=1.26.0" \
-        "python-dateutil>=2.8.0" \
-        "dateparser>=1.2.0" \
-        "pytz>=2023.3" \
-        "click>=8.1.0" \
-        "rich>=13.7.0" \
-        "tqdm>=4.66.0" \
-        "colorama>=0.4.6" \
-        "pyyaml>=6.0.0" \
-        "bcrypt>=4.1.0" \
-        "pycryptodome>=3.19.0" \
-        "web3>=6.14.0" \
-        "urllib3>=2.0.0" \
-        "chardet>=5.0.0"; \
-    do \
-        echo "=== Устанавливаем: $pkg ===" && \
-        pip install --no-cache-dir "$pkg" 2>/dev/null || echo "⚠️ Предупреждение: не удалось установить $pkg"; \
-    done && \
-    # 🔥 pdftotext устанавливаем ОТДЕЛЬНО с флагами для компиляции
-    echo "=== Устанавливаем pdftotext (требует компиляции) ===" && \
-    CFLAGS="-I/usr/include/poppler" LDFLAGS="-L/usr/lib" pip install --no-cache-dir pdftotext 2>/dev/null || \
-    echo "⚠️ pdftotext не установлен (будет использован pdfplumber)"
+    pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# УСТАНОВКА OSINT ИНСТРУМЕНТОВ ИЗ GIT
+# ============================================================
+
+RUN cd /opt/osint-tools && \
+    # theHarvester
+    git clone --depth 1 https://github.com/laramies/theHarvester.git && \
+    cd theHarvester && pip install -r requirements.txt . && cd .. && \
+    # Sherlock
+    git clone --depth 1 https://github.com/sherlock-project/sherlock.git && \
+    cd sherlock && pip install -r requirements.txt && cd .. && \
+    # Blackbird
+    git clone --depth 1 https://github.com/p1ngul1n0/blackbird.git && \
+    cd blackbird && pip install -r requirements.txt && cd .. && \
+    # Nexfil
+    git clone --depth 1 https://github.com/thewhiteh4t/nexfil.git && \
+    cd nexfil && pip install -r requirements.txt && cd .. && \
+    # Toutatis
+    git clone --depth 1 https://github.com/megadose/toutatis.git && \
+    cd toutatis && pip install -r requirements.txt . && cd .. && \
+    # Ghunt
+    git clone --depth 1 https://github.com/mxrch/GHunt.git && \
+    cd GHunt && pip install -r requirements.txt && cd .. && \
+    # EmailRep
+    git clone --depth 1 https://github.com/keraattin/EmailRep.git && \
+    cd EmailRep && pip install -r requirements.txt && cd .. && \
+    # Sublist3r
+    git clone --depth 1 https://github.com/aboul3la/Sublist3r.git && \
+    cd Sublist3r && pip install -r requirements.txt && cd .. && \
+    # DNSRecon
+    git clone --depth 1 https://github.com/darkoperator/dnsrecon.git && \
+    cd dnsrecon && pip install -r requirements.txt && cd .. && \
+    # Fierce
+    git clone --depth 1 https://github.com/mschwager/fierce.git && \
+    cd fierce && pip install -r requirements.txt && cd .. && \
+    # Knockpy
+    git clone --depth 1 https://github.com/guelfoweb/knock.git && \
+    cd knock && pip install -r requirements.txt && cd .. && \
+    # OnionSearch
+    git clone --depth 1 https://github.com/megadose/OnionSearch.git && \
+    cd OnionSearch && pip install -r requirements.txt && cd .. && \
+    # DarkSearch
+    git clone --depth 1 https://github.com/thewhiteh4t/DarkSearch.git && \
+    cd DarkSearch && pip install -r requirements.txt && cd .. && \
+    # Ahmia
+    git clone --depth 1 https://github.com/ahmia/ahmia-site.git && \
+    # IPFS Search
+    git clone --depth 1 https://github.com/ipfs-search/ipfs-search.git && \
+    echo "All OSINT tools installed"
+
+# Добавляем инструменты в PATH
+ENV PATH="/opt/osint-tools/theHarvester:/opt/osint-tools/sherlock:/opt/osint-tools/blackbird:/opt/osint-tools/nexfil:/opt/osint-tools/toutatis:/opt/osint-tools/GHunt:/opt/osint-tools/Sublist3r:/opt/osint-tools/dnsrecon:/opt/osint-tools/fierce:/opt/osint-tools/knock:${PATH}"
 
 # Загрузка NLTK данных
-RUN python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('averaged_perceptron_tagger', quiet=True); nltk.download('maxent_ne_chunker', quiet=True); nltk.download('words', quiet=True)" 2>/dev/null || true
+RUN python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('averaged_perceptron_tagger', quiet=True); nltk.download('maxent_ne_chunker', quiet=True); nltk.download('words', quiet=True); nltk.download('vader_lexicon', quiet=True)" 2>/dev/null || true
 
 # Загрузка spaCy моделей
 RUN python -m spacy download en_core_web_sm 2>/dev/null || true && \
     python -m spacy download ru_core_news_sm 2>/dev/null || true
 
-# Создаем директорию для GeoIP и скачиваем базы
+# Создаем директорию для GeoIP
 RUN mkdir -p /usr/local/share/GeoIP && \
     wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-City.mmdb -O /usr/local/share/GeoIP/GeoLite2-City.mmdb 2>/dev/null || true && \
     wget -q https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-ASN.mmdb -O /usr/local/share/GeoIP/GeoLite2-ASN.mmdb 2>/dev/null || true
@@ -167,7 +166,7 @@ RUN mkdir -p /usr/local/share/GeoIP && \
 # Копируем код приложения
 COPY --chown=osint:osint . .
 
-# Создаем директории для данных
+# Создаем директории
 RUN mkdir -p /app/logs /app/reports /app/cache /app/uploads /app/exports && \
     chown -R osint:osint /app/logs /app/reports /app/cache /app/uploads /app/exports
 
@@ -177,7 +176,7 @@ USER osint
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/opt/osint-tools
 
 # Тома
 VOLUME ["/data", "/app/logs", "/app/reports", "/app/cache", "/app/uploads", "/app/exports"]
