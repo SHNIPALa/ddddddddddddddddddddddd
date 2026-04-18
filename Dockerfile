@@ -1,19 +1,26 @@
 # ============================================================
 # ULTIMATE AGGRESSIVE OSINT FRAMEWORK
-# Dockerfile - ИСПРАВЛЕННАЯ ВЕРСИЯ (с pycairo зависимостями)
+# Dockerfile - ИСПРАВЛЕННАЯ ВЕРСИЯ (с non-free репозиториями)
 # ============================================================
 
 FROM python:3.11-slim-bookworm
 
 LABEL maintainer="OSINT Framework"
 LABEL description="ULTIMATE AGGRESSIVE OSINT"
-LABEL version="5.0.1"
+LABEL version="5.0.2"
+
+# ============================================================
+# ДОБАВЛЕНИЕ NON-FREE РЕПОЗИТОРИЕВ (для unrar и p7zip-rar)
+# ============================================================
+RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian-security bookworm-security main contrib non-free" >> /etc/apt/sources.list
 
 # ============================================================
 # УСТАНОВКА СИСТЕМНЫХ ЗАВИСИМОСТЕЙ
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Компиляция (ОБЯЗАТЕЛЬНО для pycairo)
+    # Компиляция
     build-essential \
     gcc \
     g++ \
@@ -34,41 +41,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-setuptools \
     python3-wheel \
     cython3 \
-    # Библиотеки для криптографии
+    # Библиотеки
     libssl-dev \
     libffi-dev \
-    # XML и HTML
     libxml2-dev \
     libxslt1-dev \
-    # Изображения
     libjpeg-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
     libtiff-dev \
     libwebp-dev \
-    # 🔥 CAIRO (для pycairo/maigret)
+    # Cairo
     libcairo2-dev \
     libcairo2 \
-    python3-cairo \
-    python3-cairo-dev \
     libgirepository1.0-dev \
-    gir1.2-gtk-3.0 \
     # PDF
     libpoppler-dev \
     libpoppler-cpp-dev \
     poppler-utils \
     # Документы
     antiword \
-    unrtf \
     # OCR
     tesseract-ocr \
     tesseract-ocr-eng \
     tesseract-ocr-rus \
-    # Архивы
+    # Архивы (исправлено)
     unzip \
     p7zip-full \
     p7zip-rar \
-    unrar \
+    unrar-free \
     # Сеть и DNS
     dnsutils \
     whois \
@@ -107,16 +108,14 @@ RUN useradd -m -u 1000 -s /bin/bash osint && \
 WORKDIR /app
 
 # ============================================================
-# КОПИРОВАНИЕ requirements.txt
-# ============================================================
-COPY requirements.txt .
-
-# ============================================================
-# УСТАНОВКА PYTHON ПАКЕТОВ (с обработкой ошибок)
+# УСТАНОВКА PYTHON ПАКЕТОВ
 # ============================================================
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Устанавливаем пакеты по одному, игнорируя ошибки
+# Копируем requirements
+COPY requirements.txt .
+
+# Устанавливаем пакеты с игнорированием ошибок
 RUN while IFS= read -r line || [ -n "$line" ]; do \
         [ -z "$line" ] && continue; \
         line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'); \
@@ -125,24 +124,6 @@ RUN while IFS= read -r line || [ -n "$line" ]; do \
         echo "=== Installing: $line ==="; \
         pip install --no-cache-dir "$line" 2>/dev/null || echo "⚠️ Skipped: $line"; \
     done < requirements.txt
-
-# 🔥 Отдельно устанавливаем pycairo (требует системные библиотеки)
-RUN pip install --no-cache-dir pycairo 2>/dev/null || echo "⚠️ pycairo not installed"
-
-# ============================================================
-# УСТАНОВКА OSINT ИНСТРУМЕНТОВ (опционально)
-# ============================================================
-RUN cd /opt/osint-tools && \
-    git clone --depth 1 https://github.com/laramies/theHarvester.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/sherlock-project/sherlock.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/megadose/holehe.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/p1ngul1n0/blackbird.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/thewhiteh4t/nexfil.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/megadose/toutatis.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/aboul3la/Sublist3r.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/darkoperator/dnsrecon.git 2>/dev/null || true && \
-    git clone --depth 1 https://github.com/mschwager/fierce.git 2>/dev/null || true && \
-    echo "✅ OSINT tools cloned"
 
 # ============================================================
 # NLTK ДАННЫЕ
@@ -181,7 +162,7 @@ USER osint
 # ============================================================
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app:/opt/osint-tools
+ENV PYTHONPATH=/app
 
 # ============================================================
 # HEALTHCHECK
